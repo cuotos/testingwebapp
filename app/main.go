@@ -6,19 +6,15 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 )
 
 var (
-	loadingMsgs = []string{
-		"fixing the world",
-		"calculating bath bomb ballistic trajectory",
-		"giving wally time to hide",
-		"milking the almond herd",
-		"mixing genetic pool",
-	}
-
 	secureToken = ""
+
+	startedMutex  = &sync.RWMutex{}
+	serverStarted = false
 )
 
 func main() {
@@ -29,26 +25,42 @@ func main() {
 		log.Fatal("API_TOKEN env variable not set")
 	}
 
-	if os.Getenv("DEBUG") != "1" {
-		log.Println("aligning the stars...")
-		log.Println("starting service in...")
-
-		for i := len(loadingMsgs) - 1; i >= 0; i-- {
-			log.Printf("%v... %v", i+1, loadingMsgs[i])
-			time.Sleep(time.Second * 2)
+	go func() {
+		for i := 5; i > 0; i-- {
+			log.Printf("starting in %v...", i)
+			time.Sleep(time.Second * 5)
 		}
-	}
+
+		startedMutex.Lock()
+		serverStarted = true
+		startedMutex.Unlock()
+		log.Println("service running")
+	}()
 
 	m := mux.NewRouter()
 
-	m.HandleFunc("/healthz", logHandler(func(writer http.ResponseWriter, request *http.Request) {
-		writer.Write([]byte("ok"))
-		return
-	}))
+	m.HandleFunc("/healthz", logHandler(healthHandler()))
+	m.HandleFunc("/readyz", logHandler(healthHandler()))
 	m.HandleFunc("/{uri}", authHandler(logHandler(echoHandler())))
 
-	log.Println("service running")
 	log.Fatal(http.ListenAndServe(":8080", m))
+}
+
+func healthHandler() http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		startedMutex.RLock()
+		started := serverStarted
+		startedMutex.RUnlock()
+
+		if !started {
+			writer.WriteHeader(http.StatusInternalServerError)
+			writer.Write([]byte("error: app not ready yet. normally takes approx 20s"))
+			return
+		} else {
+			writer.Write([]byte("ok"))
+			return
+		}
+	}
 }
 
 func logHandler(h http.HandlerFunc) http.HandlerFunc {
@@ -94,6 +106,6 @@ func echoHandler() http.HandlerFunc {
 }
 
 type responseBody struct {
-	Path string `json:"path"`
-	Env map[string]string `json:"env"`
+	Path string            `json:"path"`
+	Env  map[string]string `json:"env"`
 }
