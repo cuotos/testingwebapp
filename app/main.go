@@ -41,18 +41,32 @@ func main() {
 
 	m := mux.NewRouter()
 
-	m.HandleFunc("/{uri}", authHandler(echoHandler()))
+	m.HandleFunc("/healthz", logHandler(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Write([]byte("ok"))
+		return
+	}))
+	m.HandleFunc("/{uri}", authHandler(logHandler(echoHandler())))
 
 	log.Println("service running")
 	log.Fatal(http.ListenAndServe(":8080", m))
 }
 
+func logHandler(h http.HandlerFunc) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		log.Printf("request received. path=%v", request.URL)
+		h(writer, request)
+	}
+}
+
 func authHandler(h http.HandlerFunc) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		if request.Header.Get("X-API-TOKEN") == secureToken {
+
+		suppliedAuthToken := request.Header.Get("X-API-TOKEN")
+
+		if suppliedAuthToken == secureToken {
 			h(writer, request)
-			return
 		} else {
+			log.Println("unauthorized request")
 			writer.WriteHeader(http.StatusUnauthorized)
 			writer.Write([]byte("error: unauthorized"))
 			return
