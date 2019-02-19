@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"github.com/gorilla/mux"
 	"log"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -16,12 +18,18 @@ var (
 		"mixing genetic pool",
 	}
 
-	debug = false
+	secureToken = ""
 )
 
 func main() {
 
-	if !debug {
+	secureToken = os.Getenv("API_TOKEN")
+
+	if secureToken == "" {
+		log.Fatal("API_TOKEN env variable not set")
+	}
+
+	if os.Getenv("DEBUG") != "1" {
 		log.Println("aligning the stars...")
 		log.Println("starting service in...")
 
@@ -33,10 +41,23 @@ func main() {
 
 	m := mux.NewRouter()
 
-	m.HandleFunc("/{uri}", echoHandler())
+	m.HandleFunc("/{uri}", authHandler(echoHandler()))
 
 	log.Println("service running")
 	log.Fatal(http.ListenAndServe(":8080", m))
+}
+
+func authHandler(h http.HandlerFunc) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("X-API-TOKEN") == secureToken {
+			h(writer, request)
+			return
+		} else {
+			writer.WriteHeader(http.StatusUnauthorized)
+			writer.Write([]byte("error: unauthorized"))
+			return
+		}
+	}
 }
 
 func echoHandler() http.HandlerFunc {
@@ -45,7 +66,20 @@ func echoHandler() http.HandlerFunc {
 
 		requestUri, _ := vars["uri"]
 
-		writer.Write([]byte(requestUri))
+		envVars := make(map[string]string)
+		envVars["FOO"] = os.Getenv("FOO")
+		envVars["BAR"] = os.Getenv("BAR")
+
+		res := responseBody{requestUri, envVars}
+
+		resJson, _ := json.Marshal(res)
+
+		writer.Write([]byte(resJson))
 		return
 	}
+}
+
+type responseBody struct {
+	Path string `json:"path"`
+	Env map[string]string `json:"env"`
 }
