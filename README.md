@@ -1,3 +1,5 @@
 # testingwebapp
 
-Is this used by the interview process?? i cant remember
+Simple webapp that does lots of work so can take a while to start up...
+
+Autobuilt on docker hub
