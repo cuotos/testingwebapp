@@ -2,12 +2,13 @@ package main
 
 import (
 	"encoding/json"
-	"github.com/gorilla/mux"
 	"log"
 	"net/http"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/gorilla/mux"
 )
 
 var (
@@ -19,12 +20,14 @@ var (
 
 func main() {
 
+	// Get the security token from env var that will be used to verify calls from clients (X-API-TOKEN header)
 	secureToken = os.Getenv("API_TOKEN")
 
 	if secureToken == "" {
 		log.Fatal("API_TOKEN env variable not set")
 	}
 
+	// This app is slow to start.... set global var to true when its finished its oh so important start up process
 	go func() {
 		for i := 5; i > 0; i-- {
 			log.Printf("starting in %v...", i)
@@ -39,14 +42,17 @@ func main() {
 
 	m := mux.NewRouter()
 
-	m.HandleFunc("/healthz", logHandler(healthHandler()))
-	m.HandleFunc("/readyz", logHandler(healthHandler()))
-	m.HandleFunc("/{uri}", authHandler(logHandler(echoHandler())))
+	// The endpoints for the app to listen on. /healthz and /readyz do not require authentication
+	m.HandleFunc("/healthz", logHandler(healthzHandler()))
+	m.HandleFunc("/readyz", logHandler(healthzHandler()))
+
+	m.HandleFunc("/{uri:.*}", authHandler(logHandler(echoHandler())))
 
 	log.Fatal(http.ListenAndServe(":8080", m))
 }
 
-func healthHandler() http.HandlerFunc {
+// healthzHandler will return if the app is healthy and running
+func healthzHandler() http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		startedMutex.RLock()
 		started := serverStarted
@@ -63,6 +69,7 @@ func healthHandler() http.HandlerFunc {
 	}
 }
 
+// logHandler logs all request to the log / stdout
 func logHandler(h http.HandlerFunc) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		log.Printf("request received. path=%v", request.URL)
@@ -70,6 +77,7 @@ func logHandler(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// authHandler makes sure calls to specified handlers contain the correct security header, as configured by the env var API_TOKEN
 func authHandler(h http.HandlerFunc) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 
@@ -86,6 +94,8 @@ func authHandler(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// echoHandler will return a JSON object containing the requested URI and the FOO and BAR env vars from the server
+// it will return even if the app is not marked as healthy in /healthz
 func echoHandler() http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		vars := mux.Vars(request)
@@ -106,6 +116,6 @@ func echoHandler() http.HandlerFunc {
 }
 
 type responseBody struct {
-	Path string            `json:"path"`
+	Path string            `json:"requestedPath"`
 	Env  map[string]string `json:"env"`
 }
