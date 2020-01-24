@@ -1,6 +1,6 @@
-FROM golang:1.11 as builder
+FROM golang:1.13 as builder
 
-COPY app /app
+COPY . /app
 
 WORKDIR /app
 
